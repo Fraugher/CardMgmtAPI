@@ -17,6 +17,8 @@ These are the six actions below along with their Authorizations to role.
 * PayUsingCard (Administrator, Customer) - even an employee should not be able to charge a card, so this is restricted to Customer.  This action calculates a UFE fee and debits a total amount against the Card Account
 
 # To Use
+The demonstration is best experienced by viewing the API in Swagger UI.
+
 First, login using the AuthLogin login (api/AuthLogin/login.  Enter credentials in the form:
 {
   "userName": "Customer",
