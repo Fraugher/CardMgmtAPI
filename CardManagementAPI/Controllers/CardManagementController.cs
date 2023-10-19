@@ -131,7 +131,7 @@ namespace CardManagementAPI.Controllers
         }
 
         // GET CARD BALANCE
-        [AuthorizeOnAnyOnePolicy("Customer, Employee, Customer")]
+        [AuthorizeOnAnyOnePolicy("Administrator, Employee, Customer")]
         [HttpGet]
         [Route("GetBalance", Name = "GetBalance")]
         [ActionName("Create Card Balance by Account Number")]
