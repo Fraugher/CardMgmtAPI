@@ -4,36 +4,35 @@ using CardManagementAPI.Data;
 using CardManagementAPI.Filters;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.IdentityModel;
 
 namespace CardManagementAPI.Controllers
 {
-    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
-    public class CardManagementController : ControllerBase
+    public class CardManagementAPIController : ControllerBase
     {
         private readonly UFEFee _feeCalculator;
         private readonly IDbContextFactory<ApiDataContext> _dbContextFactory;
-        public CardManagementController(IDbContextFactory<ApiDataContext> contextFactory)
+        public CardManagementAPIController(IDbContextFactory<ApiDataContext> contextFactory)
         {
             _dbContextFactory = contextFactory;
             _feeCalculator = UFEFee.Instance;
         }
 
         // CREATE CARD//
-        //        [AuthorizeOnAnyOnePolicy("BankEmployee")]
-        [Authorize]
+        [AuthorizeOnAnyOnePolicy("Administrator, Employee")]
         [HttpPost]
         [ActionName("Create Card with New Card Number")]
         [Route("CreateNew")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(Card))]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public JsonResult Create()
         {
             bool IsDuplicate = true;
             Card? card = null;
-            // get a new unique Account Number
             while (IsDuplicate)
             {
+                // get a new unique Account Number
                 String newAccountNumber = new CardNumber(isNewAccount: true).AccountNumber;
                 using (ApiDataContext context = _dbContextFactory.CreateDbContext())
                 {
@@ -44,7 +43,14 @@ namespace CardManagementAPI.Controllers
             }
             if (card != null)
             {
-                ThreadPool.QueueUserWorkItem(state => AddCardToDb(card));
+                ThreadPool.QueueUserWorkItem(state =>
+                {
+                    try
+                    {
+                        AddCardToDb(card);
+                    }
+                    catch (Exception ex) {}
+                });
                 var result = new
                 {
                     Meta = new { Status = "Account Created!", Message = "A new card account was created with Account Number = " + card.AccountNumber},
@@ -58,9 +64,74 @@ namespace CardManagementAPI.Controllers
             }
         }
 
+        // CREATE DEMO CARD//
+        [AuthorizeOnAnyOnePolicy("Customer")]
+        [HttpPost]
+        [ActionName("Create Card so Customer can Use the Demo")]
+        [Route("CreateCardForDemoCustomerOnly")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(Card))]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public JsonResult CreateDemo()
+        {
+            bool IsDuplicate = true;
+            Card? card = null;
+            // get a new unique Account Number
+            while (IsDuplicate)
+            {
+                const String newAccountNumber = "372372974500000"; // DEMO Number
+                using (ApiDataContext context = _dbContextFactory.CreateDbContext())
+                {
+                    Card? cardExists = context.Cards.SingleOrDefault(c => c.AccountNumber == newAccountNumber);
+                    IsDuplicate = (cardExists != null);
+                }
+                if (!IsDuplicate)
+                {
+                    card = new Card(newAccountNumber);
+                    card.AccountBalance = 540.75M;
+                }
+                else
+                {
+                    var result = new
+                    {
+                        Meta = new
+                        {
+                            Status = "Account Already Exists!",
+                            Message = "Your demo card already exists with Account Number = "
+                                + card.AccountNumber + " and a balance of $540.75.  You cannot create any more cards."
+                        },
+                        Response = BadRequest()
+                    };
+                    return new JsonResult(result);
+                }
+            }
+            if (card != null)
+            {
+                ThreadPool.QueueUserWorkItem(state =>
+                {
+                    try
+                    {
+                        AddCardToDb(card);
+                    }
+                    catch (Exception ex) { }
+                });
+                var result = new
+                {
+                    Meta = new { Status = "Account Created!", Message = "A new demo card account was created with Account Number = " 
+                        + card.AccountNumber + " and a balance of $540.75;"
+                    },
+                    Response = Ok(card)
+                };
+                return new JsonResult(result);
+            }
+            else
+            {
+                return new JsonResult(NotFound());
+            }
+        }
+
         // GET CARD BALANCE
-        //[AuthorizeOnAnyOnePolicy("Customer,BankEmployee")]
-        //[AllowAnonymous]
+        [AuthorizeOnAnyOnePolicy("Customer, Employee, Customer")]
         [HttpGet]
         [Route("GetBalance", Name = "GetBalance")]
         [ActionName("Create Card Balance by Account Number")]
@@ -98,8 +169,7 @@ namespace CardManagementAPI.Controllers
         }
 
         // GET ALL EXISTING CARD NUMBERS
-        //[AllowAnonymous]
-//        [AuthorizeOnAnyOnePolicy("Administrator")]
+        [AuthorizeOnAnyOnePolicy("Administrator, Employee")]
         [HttpGet]
         [Route("GetAllCards", Name = "GetAllCards")]
         [ActionName("Get All Card Account Numbers and Balances")]
@@ -117,8 +187,7 @@ namespace CardManagementAPI.Controllers
         }
 
         // GET ALL FEES
-        //        [AuthorizeOnAnyOnePolicy("Administrator")]
-        //[AllowAnonymous]
+        [AuthorizeOnAnyOnePolicy("Administrator")]
         [HttpGet]
         [Route("GetAllFees", Name = "GetAllFees")]
         [ActionName("Get All Fees Request History")]
@@ -135,8 +204,7 @@ namespace CardManagementAPI.Controllers
         }
 
         // PAY WITH CARD
-        //[AllowAnonymous]
-//        [AuthorizeOnAnyOnePolicy("Customer")]
+        [AuthorizeOnAnyOnePolicy("Administrator, Customer")]
         [HttpPut]
         [Route("PayUsingCard", Name = "PayUsingCard")]
         [ActionName("Pay Using Card")]
@@ -198,6 +266,35 @@ namespace CardManagementAPI.Controllers
             };
             return new JsonResult(result);
         }
+
+        [AllowAnonymous]
+        [HttpGet, Route("auth/denied")]
+        [ApiExplorerSettings(IgnoreApi = true)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public JsonResult AuthorizationFailed()
+        {
+            var result = new
+            {
+                Meta = new { Status = "Unauthorized!", Message = "Your user type is restricted from access to this resource." },
+                Response = Unauthorized()
+            };
+            return new JsonResult(result);
+        }
+
+        [AllowAnonymous]
+        [HttpGet, Route("auth/login")]
+        [NonAction]
+        [ApiExplorerSettings(IgnoreApi = true)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public JsonResult NotLogged()
+        {
+            var result = new
+            {
+                Meta = new { Status = "Please Log In", Message = "You must be logged in to access this resource." },
+                Response = Unauthorized()
+            };
+            return new JsonResult(result);
+        }
         private void AddCardToDb(Card card)
         {
             using (ApiDataContext context = _dbContextFactory.CreateDbContext())
@@ -209,12 +306,16 @@ namespace CardManagementAPI.Controllers
         private void LogFee(DateTime previousDate, Decimal previousFee,
             DateTime currentDate, Decimal currentFee)
         {
-            UFEFeeLogger thisFee = new UFEFeeLogger(previousDate, previousFee, currentDate, currentFee);
-            using (ApiDataContext context = _dbContextFactory.CreateDbContext())
+            try
             {
-                context.UFEFees.Add(thisFee);
-                context.SaveChanges();
+                UFEFeeLogger thisFee = new UFEFeeLogger(previousDate, previousFee, currentDate, currentFee);
+                using (ApiDataContext context = _dbContextFactory.CreateDbContext())
+                {
+                    context.UFEFees.Add(thisFee);
+                    context.SaveChanges();
+                }
             }
+            catch { }
         }
         private static string CurrencyFormat(decimal amount)
         {

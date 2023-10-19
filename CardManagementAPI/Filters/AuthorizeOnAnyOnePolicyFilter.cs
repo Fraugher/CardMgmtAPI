@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace CardManagementAPI.Filters
 {
@@ -27,19 +28,36 @@ namespace CardManagementAPI.Filters
         /// <returns>Sets the context.Result to ForbidResult() if the user fails all of the policies listed.</returns>
         public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
         {
-            var policies = Policies.Split(",").ToList();
+            bool authorized = false;
+            var role = "Unauthorized";
+            var handler = new JwtSecurityTokenHandler();
+            string authHeader = context.HttpContext.Request.Headers["Authorization"];
+            if (authHeader != null)
+            {
+                authHeader = authHeader.Replace("Bearer ", "");
+                var jsonToken = handler.ReadToken(authHeader);
+                var tokenS = handler.ReadToken(authHeader) as JwtSecurityToken;
+                role = tokenS.Claims.First(claim => claim.Type == "role").Value;
+            }
+            else
+            {
+                Console.WriteLine("Not logged in");
+                context.Result = new ForbidResult();
+                return;
+            }
 
+            var policies = Policies.Split(",").ToList();
             // Loop through policies.  User need only belong to one policy to be authorized.
             foreach (var policy in policies)
             {
-                var authorized = await authorization.AuthorizeAsync(context.HttpContext.User, policy);
-                if (authorized.Succeeded)
+                authorized = (policy.ToString() == role);
+                if (authorized)
                 {
+                    Console.WriteLine("Authorization succeeded for policy = " + policy.ToString());
                     return;
                 }
-
             }
-
+            Console.WriteLine("Authorization failed.");
             context.Result = new ForbidResult();
             return;
         }

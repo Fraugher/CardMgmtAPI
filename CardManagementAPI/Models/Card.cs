@@ -1,14 +1,14 @@
-﻿using System.Runtime.CompilerServices;
-using System;
+﻿using System.Text.Json.Serialization;
 
 namespace CardManagementAPI.Models
 {
     public class Card
     {
+        [JsonIgnore] 
         public int Id { get; set; }
         public string AccountNumber { get; set; }
         public decimal AccountBalance { get; set; }
-
+ 
         public Card() => AccountNumber = new CardNumber().AccountNumber;
         public Card(string cardNumber) => AccountNumber = cardNumber;
         public Card(bool isNewAcccount = false) => AccountNumber = new CardNumber(isNewAccount: isNewAcccount).AccountNumber;

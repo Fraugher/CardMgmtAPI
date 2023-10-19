@@ -1,7 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-using System;
-
-namespace CardManagementAPI.Models
+﻿namespace CardManagementAPI.Models
 {
     public class CardNumber
     {

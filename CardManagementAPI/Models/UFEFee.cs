@@ -56,7 +56,6 @@ namespace CardManagementAPI.Models
                 feeCycles = daysPassed * 24 + hourCurrent - hourPrevious;
             for (int i = 1; i <= feeCycles; i++)
                 newFee *= RandomUFEFactor();
-            Console.WriteLine("FeeCycles = " + feeCycles.ToString());   
             return newFee;
         }
         private static decimal RandomUFEFactor()
